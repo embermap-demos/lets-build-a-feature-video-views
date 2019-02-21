@@ -1,213 +1,107 @@
-diff --git a/app/pods/components/ui-tooltip/component.js b/app/pods/components/ui-tooltip/component.js
-index 0287722..a66943a 100644
---- a/app/pods/components/ui-tooltip/component.js
-+++ b/app/pods/components/ui-tooltip/component.js
-@@ -3,6 +3,36 @@ import Component from '@ember/component';
- export default Component.extend({
- 
-   style: 'top',
-+  attachTo: null,
-+
-+  tagName: '',
-+
-+  didInsertElement() {
-+    this._super(...arguments);
-+
-+    this.targetElement = document.querySelector(this.attachTo);
-+
-+    this.handleMouseEnter = this.handleMouseEnter.bind(this);
-+    this.handleMouseLeave = this.handleMouseLeave.bind(this);
-+
-+    this.targetElement.addEventListener('mouseenter', this.handleMouseEnter);
-+    this.targetElement.addEventListener('mouseleave', this.handleMouseLeave);
-+  },
-+
-+  willDestroyElement() {
-+    this._super(...arguments);
-+
-+    this.targetElement.removeEventListener('mouseenter', this.handleMouseEnter);
-+    this.targetElement.removeEventListener('mouseleave', this.handleMouseLeave);
-+  },
-+
-+  handleMouseEnter() {
-+    this.set('isShowing', true);
-+  },
-+
-+  handleMouseLeave() {
-+    this.set('isShowing', false);
-+  },
- 
-   didReceiveAttrs(){
-     if (this.style === 'bottom') {
-diff --git a/app/pods/components/ui-tooltip/template.hbs b/app/pods/components/ui-tooltip/template.hbs
-index 434b757..53e6843 100644
---- a/app/pods/components/ui-tooltip/template.hbs
-+++ b/app/pods/components/ui-tooltip/template.hbs
-@@ -1,18 +1,20 @@
--{{#modal-dialog
--  tetherTarget=attachTo
--  targetAttachment=targetAttachment
--  attachment=attachment
--  containerClassNames='z-999'}}
-+{{#if this.isShowing}}
-+  {{#liquid-tether
-+    target=attachTo
-+    targetAttachment=targetAttachment
-+    attachment=attachment
-+    class='fading-tooltip'}}
- 
--  <div class="pb-1">
--    <div class="tooltip-arrow-wrapper">
--      <div class="tooltip-arrow-parent shadow">
--        <div class="rounded-2 p-2 bg-grey-darkest text-white text-8 text-center">
--          {{yield}}
-+    <div class="pb-1">
-+      <div class="tooltip-arrow-wrapper">
-+        <div class="tooltip-arrow-parent shadow">
-+          <div class="rounded-2 p-2 bg-grey-darkest text-white text-8 text-center">
-+            {{yield}}
-+          </div>
-+          <div class="tooltip-arrow"></div>
-         </div>
--        <div class="tooltip-arrow"></div>
-       </div>
-     </div>
--  </div>
- 
--{{/modal-dialog}}
-+  {{/liquid-tether}}
-+{{/if}}
 diff --git a/app/pods/components/video-list/template.hbs b/app/pods/components/video-list/template.hbs
-index 4383378..e18204f 100644
+index e18204f..760427a 100644
 --- a/app/pods/components/video-list/template.hbs
 +++ b/app/pods/components/video-list/template.hbs
-@@ -20,14 +20,28 @@
+@@ -1,5 +1,5 @@
+ <ul class='list-reset'>
+-  {{#each (sort-by 'position' videos) as |video|}}
++  {{#each (sort-by 'position' videos) as |video i|}}
+     <li class={{if (eq activeVideo video) 'bg-em-orange -mx-3 px-3 lg:rounded'}}>
+       {{#ui-link 'topics.topic.video' video
+         style=(concat 'block tall ' (if (eq activeVideo video) 'white'))
+@@ -15,40 +15,54 @@
+             {{video.title}}
+           </div>
+ 
+-          <div class="w-64 xs:w-128 mt-px pt-px text-right pr-2 text-8 ml-auto mr-0">
++          {{!-- <div class="mt-px pt-px text-right pr-2 text-8 ml-auto mr-0">
+             {{#if video.isComingSoon}}
                <em data-test-id="coming-soon-video">Coming soon</em>
              {{else}}
-               <div>
-+                <span class='m-0 p-1 {{if (eq activeVideo video) "text-white" "text-grey-dark"}}'
-+                  data-tether-id={{concat 'viewed-video-' video.id}}
-+                >
-+                  {{fa-icon 'check'}}
-+                </span>
-+                {{#ui-tooltip attachTo=(concat "[data-tether-id='viewed-video-" video.id "']")}}
-+                  You've watched this video.
-+                {{/ui-tooltip}}
+-              <div>
+-                <span class='m-0 p-1 {{if (eq activeVideo video) "text-white" "text-grey-dark"}}'
+-                  data-tether-id={{concat 'viewed-video-' video.id}}
+-                >
+-                  {{fa-icon 'check'}}
+-                </span>
+-                {{#ui-tooltip attachTo=(concat "[data-tether-id='viewed-video-" video.id "']")}}
+-                  You've watched this video.
+-                {{/ui-tooltip}}
+-
+-                {{#if (and
+-                  video.isPremium
+-                  (not currentSession.currentUser.isSubscribed)
+-                )}}
+-                  <span class='m-0 p-1 {{if (eq activeVideo video) "text-white" "text-grey-dark"}}'
+-                    data-test-id="locked-video"
+-                    data-tether-id={{concat 'premium-video-' video.id}}
+-                  >
+-                    {{fa-icon 'lock'}}
+-                  </span>
+-                  {{#ui-tooltip attachTo=(concat "[data-tether-id='premium-video-" video.id "']")}}
+-                    This is a premium video.
+-                  {{/ui-tooltip}}
+-                {{/if}}
+-
+-                {{time-format video.duration}}
+-              </div>
++              {{time-format video.duration}}
++            {{/if}}
++          </div> --}}
++        </div>
++        <div class="flex text-8">
++          <div class="w-32 mr-1"></div>
+ 
++          <div class="pr-2">
++            {{#if video.isComingSoon}}
++              <em data-test-id="coming-soon-video">Coming soon</em>
++            {{else}}
++              {{time-format video.duration}}
+             {{/if}}
+           </div>
 +
-                 {{#if (and
-                   video.isPremium
-                   (not currentSession.currentUser.isSubscribed)
-                 )}}
--                  <span class='m-0 {{if (eq activeVideo video) "text-white" "text-grey-dark"}}'
--                        data-test-id="locked-video">
--                    {{fa-icon 'lock' class="mr-1"}}
-+                  <span class='m-0 p-1 {{if (eq activeVideo video) "text-white" "text-grey-dark"}}'
-+                    data-test-id="locked-video"
-+                    data-tether-id={{concat 'premium-video-' video.id}}
-+                  >
-+                    {{fa-icon 'lock'}}
-                   </span>
-+                  {{#ui-tooltip attachTo=(concat "[data-tether-id='premium-video-" video.id "']")}}
-+                    This is a premium video.
-+                  {{/ui-tooltip}}
-                 {{/if}}
- 
-                 {{time-format video.duration}}
-diff --git a/app/transitions.js b/app/transitions.js
-index 1804c30..cd01c10 100644
---- a/app/transitions.js
-+++ b/app/transitions.js
-@@ -6,4 +6,9 @@ export default function() {
-     this.toRoute('home.feed'),
-     this.use('fade', { duration: 100 })
-   );
++          {{#if (lt i 3)}}
++            <span
++              class='
++                m-0 mr-2
++                {{if (eq activeVideo video) "text-white" "text-green"}}
++              '
++              data-tether-id={{concat 'viewed-video-' video.id}}
++            >
++              {{fa-icon 'check'}} Played
++            </span>
++            {{#ui-tooltip attachTo=(concat "[data-tether-id='viewed-video-" video.id "']")}}
++              You've watched this video.
++            {{/ui-tooltip}}
++          {{/if}}
 +
-+  this.transition(
-+    this.hasClass('fading-tooltip'),
-+    this.use('crossFade', { duration: 100 })
-+  );
- }
-diff --git a/mirage/scenarios/default.js b/mirage/scenarios/default.js
-index b36a743..5e345ad 100644
---- a/mirage/scenarios/default.js
-+++ b/mirage/scenarios/default.js
-@@ -11,9 +11,9 @@ import userStates from './user-states';
- 
- // Choose one
- const state =
--  // 'anonymous'
-+  'anonymous'
-   // 'unsubscribed'
--  'subscribed'
-+  // 'subscribed'
- ;
- 
- export default function(server) {
-diff --git a/package.json b/package.json
-index f34f26e..ef074a0 100644
---- a/package.json
-+++ b/package.json
-@@ -110,6 +110,7 @@
-     "highlight.js": "^9.13.1",
-     "http-proxy": "^1.1.6",
-     "liquid-fire": "^0.29.5",
-+    "liquid-tether": "^2.0.7",
-     "loader.js": "^4.7.0",
-     "marked": "^0.5.2",
-     "mocha": "^5.2.0",
-diff --git a/yarn.lock b/yarn.lock
-index 27cc2d2..99cd5b5 100644
---- a/yarn.lock
-+++ b/yarn.lock
-@@ -3083,7 +3083,7 @@ broccoli-lint-eslint@^4.2.1:
-     lodash.defaultsdeep "^4.6.0"
-     md5-hex "^2.0.0"
- 
--broccoli-merge-trees@^1.0.0, broccoli-merge-trees@^1.1.0, broccoli-merge-trees@^1.1.1:
-+broccoli-merge-trees@^1.0.0, broccoli-merge-trees@^1.1.0, broccoli-merge-trees@^1.1.1, broccoli-merge-trees@^1.2.4:
-   version "1.2.4"
-   resolved "https://registry.yarnpkg.com/broccoli-merge-trees/-/broccoli-merge-trees-1.2.4.tgz#a001519bb5067f06589d91afa2942445a2d0fdb5"
-   integrity sha1-oAFRm7UGfwZYnZGvopQkRaLQ/bU=
-@@ -9168,6 +9168,28 @@ liquid-fire@^0.29.5:
-     match-media "^0.2.0"
-     velocity-animate "^1.5.1"
- 
-+liquid-tether@^2.0.7:
-+  version "2.0.7"
-+  resolved "https://registry.yarnpkg.com/liquid-tether/-/liquid-tether-2.0.7.tgz#c859e0caad2fd25b4dd57f6c8c51b10eb5529f53"
-+  integrity sha512-cekrPA2Ue7jA5X0y6FQ0/ChCpd40QFzVbOJnko7KoMn5kng+xkrWHkNg20VJhOIFrPgikREZpoGtYoFCg3/V1g==
-+  dependencies:
-+    broccoli-funnel "^1.1.0"
-+    broccoli-merge-trees "^1.2.4"
-+    ember-cli-babel "^6.12.0"
-+    ember-cli-htmlbars "^2.0.3"
-+    liquid-wormhole "^2.1.4"
-+    tether "^1.4.0"
-+
-+liquid-wormhole@^2.1.4:
-+  version "2.1.5"
-+  resolved "https://registry.yarnpkg.com/liquid-wormhole/-/liquid-wormhole-2.1.5.tgz#23ebdd85dd40d1dad424ab346f755baebc2d93d8"
-+  integrity sha512-dmnXYkxF+N8JUibDS937ucClQ+ApMLht7CCv09tWZLCFonuRPzt98pisuUxRVnFo95+kdwEVR+S2guB3JUny7A==
-+  dependencies:
-+    ember-cli-babel "^6.12.0"
-+    ember-cli-htmlbars "^2.0.3"
-+    ember-getowner-polyfill "^2.0.1"
-+    perf-primitives "^0.0.6"
-+
- livereload-js@^2.3.0:
-   version "2.3.0"
-   resolved "https://registry.yarnpkg.com/livereload-js/-/livereload-js-2.3.0.tgz#c3ab22e8aaf5bf3505d80d098cbad67726548c9a"
-@@ -11058,6 +11080,13 @@ pbkdf2@^3.0.3:
-     safe-buffer "^5.0.1"
-     sha.js "^2.4.8"
- 
-+perf-primitives@^0.0.6:
-+  version "0.0.6"
-+  resolved "https://registry.yarnpkg.com/perf-primitives/-/perf-primitives-0.0.6.tgz#ceee069f3d7a49f83fe34b67e6b15a6d482825d8"
-+  integrity sha1-zu4Gnz16Sfg/40tn5rFabUgoJdg=
-+  dependencies:
-+    ember-cli-babel "^6.8.2"
-+
- perfectionist@^2.4.0:
-   version "2.4.0"
-   resolved "https://registry.yarnpkg.com/perfectionist/-/perfectionist-2.4.0.tgz#c147ad3714e126467f1764129ee72df861d47ea0"
++          {{#if (and
++            video.isPremium
++            (not currentSession.currentUser.isSubscribed)
++          )}}
++            <span class='m-0 mr-2 {{if (eq activeVideo video) "text-white" "text-grey-dark"}}'
++              data-test-id="locked-video"
++              data-tether-id={{concat 'premium-video-' video.id}}
++            >
++              {{fa-icon 'lock'}} Premium
++            </span>
++            {{#ui-tooltip attachTo=(concat "[data-tether-id='premium-video-" video.id "']")}}
++              This is a premium video.
++            {{/ui-tooltip}}
++          {{/if}}
+         </div>
+       {{/ui-link}}
+     </li>
+diff --git a/mirage/factories/series.js b/mirage/factories/series.js
+index eedafdd..ccc6804 100644
+--- a/mirage/factories/series.js
++++ b/mirage/factories/series.js
+@@ -27,7 +27,7 @@ export default Factory.extend({
+     afterCreate(series, server) {
+       server.create('clip', 'withEncodes', { series, title: 'Intro' });
+       server.create('clip', 'withEncodes', { series, viewingRequirement: 'subscription', title: 'Paid 1' });
+-      server.create('clip', 'withEncodes', { series, viewingRequirement: 'subscription', title: 'Paid 2' });
++      server.create('clip', 'withEncodes', { series, viewingRequirement: 'subscription', title: 'Paid 2, the one with the really, really, really long name' });
+       server.create('clip', 'withEncodes', { series, viewingRequirement: 'account', title: 'Email wall 1' });
+       server.create('clip', 'withEncodes', { series, viewingRequirement: 'subscription', comingSoon: true, title: 'Coming soon' });
+     }
