@@ -1,114 +1,30 @@
-diff --git a/app/pods/components/video-list/template.hbs b/app/pods/components/video-list/template.hbs
-index 760427a..6d918df 100644
---- a/app/pods/components/video-list/template.hbs
-+++ b/app/pods/components/video-list/template.hbs
-@@ -1,8 +1,11 @@
- <ul class='list-reset'>
-   {{#each (sort-by 'position' videos) as |video i|}}
--    <li class={{if (eq activeVideo video) 'bg-em-orange -mx-3 px-3 lg:rounded'}}>
-+    <li class={{if (eq activeVideo video)
-+      'bg-em-orange -mx-3 px-3 lg:rounded'
-+      'border-b border-b-grey-lighter'
-+    }}>
-       {{#ui-link 'topics.topic.video' video
--        style=(concat 'block tall ' (if (eq activeVideo video) 'white'))
-+        style=(concat 'block tall no-hover ' (if (eq activeVideo video) 'white'))
-         data-test-id='video-link'}}
-         <div class="flex">
-           <div class="flex-no-shrink mt-px pt-px w-32 text-8 text-center">
-@@ -11,17 +14,9 @@
- 
-           <div class={{concat 'ml-1 '
-             (if (eq activeVideo video) 'text-white'
--            (if video.isComingSoon 'text-grey-dark' 'text-black'))}}>
-+            (if video.isComingSoon 'text-grey-dark' 'text-grey-darkest'))}}>
-             {{video.title}}
-           </div>
--
--          {{!-- <div class="mt-px pt-px text-right pr-2 text-8 ml-auto mr-0">
--            {{#if video.isComingSoon}}
--              <em data-test-id="coming-soon-video">Coming soon</em>
--            {{else}}
--              {{time-format video.duration}}
--            {{/if}}
--          </div> --}}
-         </div>
-         <div class="flex text-8">
-           <div class="w-32 mr-1"></div>
-diff --git a/app/pods/topics/topic/index/template.hbs b/app/pods/topics/topic/index/template.hbs
-index 5c8b5c8..1a91a4c 100644
---- a/app/pods/topics/topic/index/template.hbs
-+++ b/app/pods/topics/topic/index/template.hbs
-@@ -44,8 +44,8 @@
- 
- <div class="py-4">
-   {{#ui-container}}
--    <div class="flex flex-col lg:flex-row mb-6">
--      <div class="lg:mr-4">
-+    <div class="flex flex-col lg:flex-row lg:justify-between mb-6">
-+      <div class="lg:w-3/5">
-         <div class="mb-4">
-           {{#ui-title}}
-             Description
-@@ -54,21 +54,21 @@
-         {{ui-md source=model.description}}
-       </div>
- 
--      <div class="lg:ml-auto">
--        {{#ui-panel style='card small' as |panel|}}
--          <div class='text-grey-dark mb-3'>
--            {{#ui-p style='small marginless'}}
--              {{model.clips.length}}
--              {{inflect-word 'videos' model.clips.length}}
--              &middot;
--              {{time-format model.duration}}
--            {{/ui-p}}
--          </div>
-+      <div class="lg:w-2/5 lg:max-w-390">
-+        {{#ui-title}}
-+          Videos
-+        {{/ui-title}}
+diff --git a/app/models/video-view.js b/app/models/video-view.js
+new file mode 100644
+index 0000000..6f170ce
+--- /dev/null
++++ b/app/models/video-view.js
+@@ -0,0 +1,9 @@
++import DS from 'ember-data';
 +
-+        <div class='text-grey-dark mb-3'>
-+          {{#ui-p style='small marginless'}}
-+            {{model.clips.length}}
-+            {{inflect-word 'episodes' model.clips.length}}
-+            <span class='px-1'>&middot;</span>
-+            {{time-format model.duration}} total watch time
-+          {{/ui-p}}
-+        </div>
++const { attr, belongsTo } = DS;
++
++export default DS.Model.extend({
++  finished: attr('boolean'),
++  user: belongsTo(),
++  clip: belongsTo()
++});
+diff --git a/mirage/scenarios/default.js b/mirage/scenarios/default.js
+index 5e345ad..5b839bd 100644
+--- a/mirage/scenarios/default.js
++++ b/mirage/scenarios/default.js
+@@ -11,8 +11,8 @@ import userStates from './user-states';
  
--          {{#panel.full-width style='small'}}
--            {{video-list videos=model.clips}}
--          {{/panel.full-width}}
--        {{/ui-panel}}
-+        {{video-list videos=model.clips}}
-       </div>
-     </div>
-   {{/ui-container}}
-diff --git a/app/services/screen.js b/app/services/screen.js
-index 54887bb..013a6cf 100644
---- a/app/services/screen.js
-+++ b/app/services/screen.js
-@@ -8,7 +8,7 @@ export default EmberScreen.extend({
-   isSmallAndDown: breakpoint('(max-width: 768px)'),
+ // Choose one
+ const state =
+-  'anonymous'
+-  // 'unsubscribed'
++  // 'anonymous'
++  'unsubscribed'
+   // 'subscribed'
+ ;
  
-   isMediumAndUp: breakpoint('(min-width: 768px)'),
--  isMediumAndDown: breakpoint('(max-width: 1024px)'),
-+  isMediumAndDown: breakpoint('(max-width: 1023px)'),
- 
-   isLarge: readOnly('isLargeAndUp'),
-   isLargeAndUp: breakpoint('(min-width: 1024px)'),
-diff --git a/mirage/factories/series.js b/mirage/factories/series.js
-index ccc6804..3358e8a 100644
---- a/mirage/factories/series.js
-+++ b/mirage/factories/series.js
-@@ -15,7 +15,7 @@ export default Factory.extend({
-   },
- 
-   description() {
--    return faker.lorem.sentence();
-+    return faker.lorem.paragraphs(2);
-   },
- 
-   gradientPrimary: '#ff00cc',
