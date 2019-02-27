@@ -1,30 +1,111 @@
-diff --git a/app/models/video-view.js b/app/models/video-view.js
-new file mode 100644
-index 0000000..6f170ce
---- /dev/null
-+++ b/app/models/video-view.js
-@@ -0,0 +1,9 @@
-+import DS from 'ember-data';
-+
-+const { attr, belongsTo } = DS;
-+
-+export default DS.Model.extend({
-+  finished: attr('boolean'),
-+  user: belongsTo(),
-+  clip: belongsTo()
-+});
-diff --git a/mirage/scenarios/default.js b/mirage/scenarios/default.js
-index 5e345ad..5b839bd 100644
---- a/mirage/scenarios/default.js
-+++ b/mirage/scenarios/default.js
-@@ -11,8 +11,8 @@ import userStates from './user-states';
+diff --git a/app/pods/topics/topic/route.js b/app/pods/topics/topic/route.js
+index ed047ae..b4404c1 100644
+--- a/app/pods/topics/topic/route.js
++++ b/app/pods/topics/topic/route.js
+@@ -10,7 +10,7 @@ export default Route.extend({
+     return this.store
+       .loadAll('series', {
+         filter,
+-        include: 'clips.encodes'
++        // include: 'clips.encodes'
+       })
+       .then(posts => posts.get('firstObject'));
+   },
+diff --git a/app/pods/topics/topic/video/components/series-playlist/component.js b/app/pods/topics/topic/video/components/series-playlist/component.js
+index d5dd3fb..91dccd7 100644
+--- a/app/pods/topics/topic/video/components/series-playlist/component.js
++++ b/app/pods/topics/topic/video/components/series-playlist/component.js
+@@ -1,6 +1,29 @@
+ import Component from '@ember/component';
++import { task } from 'ember-concurrency';
++import { inject as service } from '@ember/service';
  
- // Choose one
- const state =
--  'anonymous'
--  // 'unsubscribed'
-+  // 'anonymous'
-+  'unsubscribed'
-   // 'subscribed'
- ;
+ export default Component.extend({
++
++  store: service(),
++
+   series: null,
+-  activeClip: null
++  activeClip: null,
++
++  didInsertElement() {
++    this._super(...arguments);
++
++    this.loadData.perform();
++  },
++
++  loadData: task(function*() {
++    let slug = this.series.slug;
++    let filter = { slug };
++
++    yield this.store
++      .loadAll('series', {
++        filter,
++        include: 'clips.encodes'
++      })
++      .then(series => series.get('firstObject'));
++  })
+ });
+diff --git a/app/pods/topics/topic/video/components/series-playlist/template.hbs b/app/pods/topics/topic/video/components/series-playlist/template.hbs
+index abd832f..67d616a 100644
+--- a/app/pods/topics/topic/video/components/series-playlist/template.hbs
++++ b/app/pods/topics/topic/video/components/series-playlist/template.hbs
+@@ -1,17 +1,25 @@
+-{{#ui-title style='small marginless'}}
+-  {{series.title}}
+-{{/ui-title}}
++{{#if loadData.performCount}}
  
+-<div class='text-grey-dark mt-1 mb-3'>
+-  <div class="text-6 leading-normal flex justify-between">
+-    <div>
+-      {{series.clips.length}} {{inflect-word 'videos' series.clips.length}}
+-      &middot;
+-      {{time-format series.duration}}
++  {{#liquid-if loadData.isIdle use='fade' enableGrowth=false}}
++
++    {{#ui-title style='small marginless'}}
++      {{series.title}}
++    {{/ui-title}}
++
++    <div class='text-grey-dark mt-1 mb-3'>
++      <div class="text-6 leading-normal flex justify-between">
++        <div>
++          {{series.clips.length}} {{inflect-word 'videos' series.clips.length}}
++          &middot;
++          {{time-format series.duration}}
++        </div>
++
++        {{x-autoplay}}
++      </div>
+     </div>
+ 
+-    {{x-autoplay}}
+-  </div>
+-</div>
++    {{video-list videos=series.clips activeVideo=activeClip}}
++
++  {{/liquid-if}}
+ 
+-{{video-list videos=series.clips activeVideo=activeClip}}
++{{/if}}
+diff --git a/app/pods/topics/topic/video/route.js b/app/pods/topics/topic/video/route.js
+index 0d2d5d2..dfac92d 100644
+--- a/app/pods/topics/topic/video/route.js
++++ b/app/pods/topics/topic/video/route.js
+@@ -6,7 +6,14 @@ export default Route.extend({
+   settings: service(),
+ 
+   model({ video_slug }) {
+-    return this.store.peekAll('clip').findBy('slug', video_slug);
++    let filter = { slug: video_slug };
++
++    return this.store
++      .loadAll('clip', {
++        filter,
++        include: 'encodes,series'
++      })
++      .then(posts => posts.get('firstObject'));
+   },
+ 
+   afterModel(video) {
