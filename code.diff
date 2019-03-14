@@ -1,111 +1,28 @@
-diff --git a/app/pods/topics/topic/route.js b/app/pods/topics/topic/route.js
-index ed047ae..b4404c1 100644
---- a/app/pods/topics/topic/route.js
-+++ b/app/pods/topics/topic/route.js
-@@ -10,7 +10,7 @@ export default Route.extend({
-     return this.store
-       .loadAll('series', {
-         filter,
--        include: 'clips.encodes'
-+        // include: 'clips.encodes'
-       })
-       .then(posts => posts.get('firstObject'));
-   },
-diff --git a/app/pods/topics/topic/video/components/series-playlist/component.js b/app/pods/topics/topic/video/components/series-playlist/component.js
-index d5dd3fb..91dccd7 100644
---- a/app/pods/topics/topic/video/components/series-playlist/component.js
-+++ b/app/pods/topics/topic/video/components/series-playlist/component.js
-@@ -1,6 +1,29 @@
- import Component from '@ember/component';
-+import { task } from 'ember-concurrency';
-+import { inject as service } from '@ember/service';
- 
- export default Component.extend({
+diff --git a/tests/acceptance/video-test.js b/tests/acceptance/video-test.js
+index f3db812..09d7261 100644
+--- a/tests/acceptance/video-test.js
++++ b/tests/acceptance/video-test.js
+@@ -120,4 +120,23 @@ module('Acceptance | Video', function(hooks) {
+     assert.equal(currentURL(), `/video/this-doesnt-exist`);
+     assert.equal(currentRouteName(), "404");
+   });
 +
-+  store: service(),
++  test(`I should see a played label if I've watched a video`, async function(assert) {
++    // Assemble
++    let currentUser = loginUser();
++    this.server.create('video-view', {
++      user: currentUser,
++      clip: this.freeClip
++    });
 +
-   series: null,
--  activeClip: null
-+  activeClip: null,
++    // Act
++    await visit(`/topics/${this.series.slug}/${this.freeClip.slug}`);
 +
-+  didInsertElement() {
-+    this._super(...arguments);
++    // Assert
++    await this.inspect();
++    // assert.elementExists(testId("series-description"));
++  });
 +
-+    this.loadData.perform();
-+  },
-+
-+  loadData: task(function*() {
-+    let slug = this.series.slug;
-+    let filter = { slug };
-+
-+    yield this.store
-+      .loadAll('series', {
-+        filter,
-+        include: 'clips.encodes'
-+      })
-+      .then(series => series.get('firstObject'));
-+  })
++  // test(`I cannot see other users video views`, async function(assert) {
++  // })
  });
-diff --git a/app/pods/topics/topic/video/components/series-playlist/template.hbs b/app/pods/topics/topic/video/components/series-playlist/template.hbs
-index abd832f..67d616a 100644
---- a/app/pods/topics/topic/video/components/series-playlist/template.hbs
-+++ b/app/pods/topics/topic/video/components/series-playlist/template.hbs
-@@ -1,17 +1,25 @@
--{{#ui-title style='small marginless'}}
--  {{series.title}}
--{{/ui-title}}
-+{{#if loadData.performCount}}
- 
--<div class='text-grey-dark mt-1 mb-3'>
--  <div class="text-6 leading-normal flex justify-between">
--    <div>
--      {{series.clips.length}} {{inflect-word 'videos' series.clips.length}}
--      &middot;
--      {{time-format series.duration}}
-+  {{#liquid-if loadData.isIdle use='fade' enableGrowth=false}}
-+
-+    {{#ui-title style='small marginless'}}
-+      {{series.title}}
-+    {{/ui-title}}
-+
-+    <div class='text-grey-dark mt-1 mb-3'>
-+      <div class="text-6 leading-normal flex justify-between">
-+        <div>
-+          {{series.clips.length}} {{inflect-word 'videos' series.clips.length}}
-+          &middot;
-+          {{time-format series.duration}}
-+        </div>
-+
-+        {{x-autoplay}}
-+      </div>
-     </div>
- 
--    {{x-autoplay}}
--  </div>
--</div>
-+    {{video-list videos=series.clips activeVideo=activeClip}}
-+
-+  {{/liquid-if}}
- 
--{{video-list videos=series.clips activeVideo=activeClip}}
-+{{/if}}
-diff --git a/app/pods/topics/topic/video/route.js b/app/pods/topics/topic/video/route.js
-index 0d2d5d2..dfac92d 100644
---- a/app/pods/topics/topic/video/route.js
-+++ b/app/pods/topics/topic/video/route.js
-@@ -6,7 +6,14 @@ export default Route.extend({
-   settings: service(),
- 
-   model({ video_slug }) {
--    return this.store.peekAll('clip').findBy('slug', video_slug);
-+    let filter = { slug: video_slug };
-+
-+    return this.store
-+      .loadAll('clip', {
-+        filter,
-+        include: 'encodes,series'
-+      })
-+      .then(posts => posts.get('firstObject'));
-   },
- 
-   afterModel(video) {
