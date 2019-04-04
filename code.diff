@@ -1,61 +1,50 @@
-diff --git a/app/models/user.js b/app/models/user.js
-index a8f1802..9b1d7b2 100644
---- a/app/models/user.js
-+++ b/app/models/user.js
-@@ -52,14 +52,8 @@ export default Model.extend(Validations, {
-   }),
- 
-   videoViews: hasMany(),
--  finishedVideos: computed(function() {
--    let videos = this.videoViews
--      .filterBy('finished', true)
--      .mapBy('clip');
--
--    debugger;
--    return videos;
--  }),
-+  finishedVideoViews: filterBy('videoViews', 'finished'),
-+  finishedVideos: mapBy('finishedVideoViews', 'clip'),
- 
-   teamUsers: hasMany(),
-   teams: mapBy('teamUsers', 'team'),
-diff --git a/app/pods/components/video-list/template.hbs b/app/pods/components/video-list/template.hbs
-index 47fab4f..06cd639 100644
---- a/app/pods/components/video-list/template.hbs
-+++ b/app/pods/components/video-list/template.hbs
-@@ -36,6 +36,7 @@
-                 {{if (eq activeVideo video) "text-white" "text-green"}}
-               '
-               data-tether-id={{concat 'viewed-video-' video.id}}
-+              data-test-id={{concat 'viewed-video-' video.id}}
-             >
-               {{fa-icon 'check'}} Played
-             </span>
 diff --git a/tests/acceptance/video-test.js b/tests/acceptance/video-test.js
-index b8c6746..c271cc8 100644
+index c271cc8..a51770f 100644
 --- a/tests/acceptance/video-test.js
 +++ b/tests/acceptance/video-test.js
-@@ -126,17 +126,20 @@ module('Acceptance | Video', function(hooks) {
+@@ -11,6 +11,7 @@ module('Acceptance | Video', function(hooks) {
+     this.series = this.server.create('series', 'withClips');
+     this.freeClip = this.series.clips.models[0];
+     this.paidClip = this.series.clips.models[1];
++    this.emailWallClip = this.series.clips.models[3];
+   });
+ 
+   test('On the videos index page, I should see videos belonging to Refactorings', async function(assert) {
+@@ -121,8 +122,7 @@ module('Acceptance | Video', function(hooks) {
+     assert.equal(currentRouteName(), "404");
+   });
+ 
+-  test(`I should see a played label if I've watched a video`, async function(assert) {
+-    // Assemble
++  test(`I should see a played label if I've watched the active/current video`, async function(assert) {
      let currentUser = loginUser();
      this.server.create('video-view', {
        user: currentUser,
--      clip: this.freeClip
-+      clip: this.freeClip,
-+      finished: true
+@@ -130,13 +130,25 @@ module('Acceptance | Video', function(hooks) {
+       finished: true
      });
  
-     // Act
+-    // Act
      await visit(`/topics/${this.series.slug}/${this.freeClip.slug}`);
  
-     // Assert
--    await this.inspect();
--    assert.dom(`[data-test-id="clip-${this.freeClip.id}-link" [data-test-id="played"]`).exists();
-+    assert.dom(`[data-test-id="viewed-video-${this.freeClip.id}"]`).exists();
+-    // Assert
+     assert.dom(`[data-test-id="viewed-video-${this.freeClip.id}"]`).exists();
    });
  
-+  // test(`I should not see a played label if I have an unfinished video view`, async function(assert) {
-+  // })
++  test(`I should see a played label if I've watched a non-active video`, async function(assert) {
++    let currentUser = loginUser();
++    this.server.create('video-view', {
++      user: currentUser,
++      clip: this.emailWallClip,
++      finished: true
++    });
 +
-   // test(`I cannot see other users video views`, async function(assert) {
++    await visit(`/topics/${this.series.slug}/${this.freeClip.slug}`);
++
++    assert.dom(`[data-test-id="viewed-video-${this.emailWallClip.id}"]`).exists();
++    assert.dom(`[data-test-id="viewed-video-${this.freeClip.id}"]`).doesNotExist();
++  });
++
+   // test(`I should not see a played label if I have an unfinished video view`, async function(assert) {
    // })
  
