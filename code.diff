@@ -1,28 +1,120 @@
+diff --git a/app/models/user.js b/app/models/user.js
+index f98368a..a8f1802 100644
+--- a/app/models/user.js
++++ b/app/models/user.js
+@@ -51,7 +51,17 @@ export default Model.extend(Validations, {
+     return this.teams.any(team => team.get('name') === 'LinkedIn trial');
+   }),
+ 
+-  teamUsers: hasMany('team-user'),
++  videoViews: hasMany(),
++  finishedVideos: computed(function() {
++    let videos = this.videoViews
++      .filterBy('finished', true)
++      .mapBy('clip');
++
++    debugger;
++    return videos;
++  }),
++
++  teamUsers: hasMany(),
+   teams: mapBy('teamUsers', 'team'),
+ 
+   activeTeams: filterBy('teams', 'isActive'),
+diff --git a/app/pods/components/video-list/component.js b/app/pods/components/video-list/component.js
+index 8be82b6..ab57b19 100644
+--- a/app/pods/components/video-list/component.js
++++ b/app/pods/components/video-list/component.js
+@@ -2,4 +2,7 @@ import Component from '@ember/component';
+ 
+ export default Component.extend({
+ 
++  videos: null,
++  activeVideo: null
++
+ });
+diff --git a/app/pods/components/video-list/template.hbs b/app/pods/components/video-list/template.hbs
+index 6d918df..2e57dd7 100644
+--- a/app/pods/components/video-list/template.hbs
++++ b/app/pods/components/video-list/template.hbs
+@@ -29,7 +29,7 @@
+             {{/if}}
+           </div>
+ 
+-          {{#if (lt i 3)}}
++          {{#if (contains video currentSession.currentUser.finishedVideos)}}
+             <span
+               class='
+                 m-0 mr-2
+diff --git a/app/pods/topics/topic/video/components/series-playlist/component.js b/app/pods/topics/topic/video/components/series-playlist/component.js
+index 91dccd7..03b1c2f 100644
+--- a/app/pods/topics/topic/video/components/series-playlist/component.js
++++ b/app/pods/topics/topic/video/components/series-playlist/component.js
+@@ -1,5 +1,5 @@
+ import Component from '@ember/component';
+-import { task } from 'ember-concurrency';
++import { task, all } from 'ember-concurrency';
+ import { inject as service } from '@ember/service';
+ 
+ export default Component.extend({
+@@ -16,6 +16,13 @@ export default Component.extend({
+   },
+ 
+   loadData: task(function*() {
++    yield all([
++      this.loadSeries.perform(),
++      this.loadVideoViews.perform()
++    ]);
++  }),
++
++  loadSeries: task(function*() {
+     let slug = this.series.slug;
+     let filter = { slug };
+ 
+@@ -25,5 +32,16 @@ export default Component.extend({
+         include: 'clips.encodes'
+       })
+       .then(series => series.get('firstObject'));
++  }),
++
++  loadVideoViews: task(function*() {
++    yield this.store
++      .loadAll('video-view', {
++        filter: {
++          'user_id': this.currentSession.currentUser.id,
++          'series_id': this.series.id,
++        },
++        include: 'user,clip'
++      });
+   })
+ });
+diff --git a/mirage/config.js b/mirage/config.js
+index e5d765d..28f5968 100644
+--- a/mirage/config.js
++++ b/mirage/config.js
+@@ -234,6 +234,7 @@ export default function() {
+   this.get('/receipts/:id')
+ 
+   this.post('/video-events');
++  this.get('/video-views');
+ 
+   this.post('/linkedin-trials', (schema, request) => {
+     // TODO: I had to do this to get "relationships" to show up on included records – why? Investigate alwaysIncludeLinkageData
 diff --git a/tests/acceptance/video-test.js b/tests/acceptance/video-test.js
-index f3db812..09d7261 100644
+index 09d7261..b8c6746 100644
 --- a/tests/acceptance/video-test.js
 +++ b/tests/acceptance/video-test.js
-@@ -120,4 +120,23 @@ module('Acceptance | Video', function(hooks) {
-     assert.equal(currentURL(), `/video/this-doesnt-exist`);
-     assert.equal(currentRouteName(), "404");
+@@ -134,9 +134,12 @@ module('Acceptance | Video', function(hooks) {
+ 
+     // Assert
+     await this.inspect();
+-    // assert.elementExists(testId("series-description"));
++    assert.dom(`[data-test-id="clip-${this.freeClip.id}-link" [data-test-id="played"]`).exists();
    });
+ 
+   // test(`I cannot see other users video views`, async function(assert) {
+   // })
 +
-+  test(`I should see a played label if I've watched a video`, async function(assert) {
-+    // Assemble
-+    let currentUser = loginUser();
-+    this.server.create('video-view', {
-+      user: currentUser,
-+      clip: this.freeClip
-+    });
-+
-+    // Act
-+    await visit(`/topics/${this.series.slug}/${this.freeClip.slug}`);
-+
-+    // Assert
-+    await this.inspect();
-+    // assert.elementExists(testId("series-description"));
-+  });
-+
-+  // test(`I cannot see other users video views`, async function(assert) {
++  // test(`the video page doesnt break for unauthd users`, async function(assert) {
 +  // })
  });
