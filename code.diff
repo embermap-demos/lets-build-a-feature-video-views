@@ -1,71 +1,181 @@
-diff --git a/app/pods/topics/topic/index/route.js b/app/pods/topics/topic/index/route.js
-index 6c74252..a1e61c7 100644
---- a/app/pods/topics/topic/index/route.js
-+++ b/app/pods/topics/topic/index/route.js
-@@ -1,4 +1,11 @@
- import Route from '@ember/routing/route';
+diff --git a/app/pods/components/video-list/component.js b/app/pods/components/video-list/component.js
+index ab57b19..39e4aa0 100644
+--- a/app/pods/components/video-list/component.js
++++ b/app/pods/components/video-list/component.js
+@@ -1,4 +1,5 @@
+ import Component from '@ember/component';
++import { all } from 'rsvp';
  
- export default Route.extend({
+ export default Component.extend({
+ 
+@@ -6,3 +7,34 @@ export default Component.extend({
+   activeVideo: null
+ 
+ });
 +
-+  model() {
-+    let series = this.modelFor('topics.topic');
++export function loadData(store, series, user) {
++  let slug = series.slug;
++  let filter = { slug };
 +
-+    return series.reloadWith('clips.encodes');
++  let loadSeries = store
++    .loadAll('series', {
++      filter,
++      include: 'clips.encodes'
++    })
++    .then(series => series.get('firstObject'));
++
++  let dataRequests = [
++    loadSeries
++  ];
++
++  if (user) {
++    let loadVideoViews = store
++      .loadAll('video-view', {
++        filter: {
++          'user_id': user.id,
++          'series_id': series.id,
++        },
++        include: 'user,clip'
++      });
++
++    dataRequests.push(loadVideoViews);
 +  }
 +
- });
-diff --git a/app/pods/topics/topic/route.js b/app/pods/topics/topic/route.js
-index b4404c1..83f36f4 100644
---- a/app/pods/topics/topic/route.js
-+++ b/app/pods/topics/topic/route.js
-@@ -8,11 +8,8 @@ export default Route.extend({
-     let filter = { slug };
++  return all(dataRequests);
++}
+diff --git a/app/pods/topics/topic/index/route.js b/app/pods/topics/topic/index/route.js
+index a1e61c7..744615f 100644
+--- a/app/pods/topics/topic/index/route.js
++++ b/app/pods/topics/topic/index/route.js
+@@ -1,11 +1,13 @@
+ import Route from '@ember/routing/route';
++import { loadData } from 'ember-map/pods/components/video-list/component';
  
-     return this.store
--      .loadAll('series', {
--        filter,
--        // include: 'clips.encodes'
--      })
--      .then(posts => posts.get('firstObject'));
-+      .loadAll('series', { filter })
-+      .then(series => series.get('firstObject'));
+ export default Route.extend({
+ 
+   model() {
+     let series = this.modelFor('topics.topic');
+ 
+-    return series.reloadWith('clips.encodes');
++    return loadData(this.store, series, this.currentSession.currentUser)
++      .then(([ series ]) => series);
+   }
+ 
+ });
+diff --git a/app/pods/topics/topic/video/components/series-playlist/component.js b/app/pods/topics/topic/video/components/series-playlist/component.js
+index dc06903..8c7ba26 100644
+--- a/app/pods/topics/topic/video/components/series-playlist/component.js
++++ b/app/pods/topics/topic/video/components/series-playlist/component.js
+@@ -1,6 +1,7 @@
+ import Component from '@ember/component';
+-import { task, all } from 'ember-concurrency';
++import { task } from 'ember-concurrency';
+ import { inject as service } from '@ember/service';
++import { loadData } from 'ember-map/pods/components/video-list/component';
+ 
+ export default Component.extend({
+ 
+@@ -16,37 +17,6 @@ export default Component.extend({
    },
  
-   afterModel(topic) {
-diff --git a/mirage/scenarios/default.js b/mirage/scenarios/default.js
-index 5b839bd..b36a743 100644
---- a/mirage/scenarios/default.js
-+++ b/mirage/scenarios/default.js
-@@ -12,8 +12,8 @@ import userStates from './user-states';
- // Choose one
- const state =
-   // 'anonymous'
--  'unsubscribed'
--  // 'subscribed'
-+  // 'unsubscribed'
-+  'subscribed'
- ;
+   loadData: task(function*() {
+-    let dataRequests = [
+-      this.loadSeries.perform()
+-    ];
+-
+-    if (this.currentSession.currentUser) {
+-      dataRequests.push(this.loadVideoViews.perform());
+-    }
+-
+-    yield all(dataRequests);
+-  }),
+-
+-  loadSeries: task(function*() {
+-    let slug = this.series.slug;
+-    let filter = { slug };
+-
+-    yield this.store
+-      .loadAll('series', {
+-        filter,
+-        include: 'clips.encodes'
+-      })
+-      .then(series => series.get('firstObject'));
+-  }),
+-
+-  loadVideoViews: task(function*() {
+-    yield this.store
+-      .loadAll('video-view', {
+-        filter: {
+-          'user_id': this.currentSession.currentUser.id,
+-          'series_id': this.series.id,
+-        },
+-        include: 'user,clip'
+-      });
++    yield loadData(this.store, this.series, this.currentSession.currentUser);
+   })
+ });
+diff --git a/tests/acceptance/topics-test.js b/tests/acceptance/topics-test.js
+index 5b6a92d..6c03de0 100644
+--- a/tests/acceptance/topics-test.js
++++ b/tests/acceptance/topics-test.js
+@@ -24,7 +24,7 @@ module('Acceptance | Topic', function(hooks) {
+     await waitUntil(() => {
+       return currentRouteName() === 'subscribe.index';
+     });
+-    
++
+     assert.equal(currentRouteName(), 'subscribe.index');
+   });
  
- export default function(server) {
-diff --git a/mirage/scenarios/user-states.js b/mirage/scenarios/user-states.js
-index f4c3684..223f591 100644
---- a/mirage/scenarios/user-states.js
-+++ b/mirage/scenarios/user-states.js
-@@ -53,6 +53,17 @@ export default {
-       });
-     }
+@@ -48,4 +48,20 @@ module('Acceptance | Topic', function(hooks) {
  
-+    // Create a video view
-+    let mirageSeries = server.schema.series
-+      .where({ slug: 'mirage-tips-and-tricks' })
-+      .models[0];
-+    server.create('video-view', {
+     assert.equal(currentRouteName(), 'topics.topic.video');
+   });
++
++  test('As a subscribed user I should my video views on the index page', async function(assert) {
++    let series = this.server.create('series', 'withClips');
++    let user = loginUser();
++    subscribeUser(user);
++    let watchedClip = series.clips.models[0];
++    this.server.create('video-view', {
 +      user,
-+      clip: mirageSeries.clips.models[0],
++      clip: watchedClip,
 +      finished: true
 +    });
 +
-+    // Create some receipts
-     server.create('receipt-email', {
-       team,
-       email: 'accounting@embermap.com'
++    await visit(`/topics/${series.slug}`);
++
++    assert.dom(`[data-test-id="viewed-video-${watchedClip.id}"]`).exists();
++  });
+ });
+diff --git a/tests/acceptance/video-test.js b/tests/acceptance/video-test.js
+index f9a09de..57eca95 100644
+--- a/tests/acceptance/video-test.js
++++ b/tests/acceptance/video-test.js
+@@ -32,12 +32,12 @@ module('Acceptance | Video', function(hooks) {
+     assert.elementExists(testId('series-card'));
+   });
+ 
+-  // test('I can click on a series from the videos page and see more details', async function(assert) {
+-  //   await visit('/video');
+-  //   await click(testId('series-link'));
+-  //
+-  //   assert.elementExists(testId('video-link'), this.series.clips.length);
+-  // });
++  test('I can click on a series from the videos page and see more details', async function(assert) {
++    await visit('/video');
++    await click(testId('series-link'));
++
++    assert.elementExists(testId('video-link'), this.series.clips.length);
++  });
+ 
+   test('As an unauthenticed user I should see the series description on a video page', async function(assert) {
+     await visit(`/topics/${this.series.slug}/${this.paidClip.slug}`);
+@@ -161,7 +161,4 @@ module('Acceptance | Video', function(hooks) {
+ 
+     assert.dom(`[data-test-id="viewed-video-${this.freeClip.id}"]`).doesNotExist();
+   });
+-
+-  // test(`the video page doesnt break for unauthd users`, async function(assert) {
+-  // })
+ });
