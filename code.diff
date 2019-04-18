@@ -1,97 +1,71 @@
-diff --git a/app/pods/topics/topic/video/components/series-playlist/component.js b/app/pods/topics/topic/video/components/series-playlist/component.js
-index 03b1c2f..dc06903 100644
---- a/app/pods/topics/topic/video/components/series-playlist/component.js
-+++ b/app/pods/topics/topic/video/components/series-playlist/component.js
-@@ -16,10 +16,15 @@ export default Component.extend({
+diff --git a/app/pods/topics/topic/index/route.js b/app/pods/topics/topic/index/route.js
+index 6c74252..a1e61c7 100644
+--- a/app/pods/topics/topic/index/route.js
++++ b/app/pods/topics/topic/index/route.js
+@@ -1,4 +1,11 @@
+ import Route from '@ember/routing/route';
+ 
+ export default Route.extend({
++
++  model() {
++    let series = this.modelFor('topics.topic');
++
++    return series.reloadWith('clips.encodes');
++  }
++
+ });
+diff --git a/app/pods/topics/topic/route.js b/app/pods/topics/topic/route.js
+index b4404c1..83f36f4 100644
+--- a/app/pods/topics/topic/route.js
++++ b/app/pods/topics/topic/route.js
+@@ -8,11 +8,8 @@ export default Route.extend({
+     let filter = { slug };
+ 
+     return this.store
+-      .loadAll('series', {
+-        filter,
+-        // include: 'clips.encodes'
+-      })
+-      .then(posts => posts.get('firstObject'));
++      .loadAll('series', { filter })
++      .then(series => series.get('firstObject'));
    },
  
-   loadData: task(function*() {
--    yield all([
--      this.loadSeries.perform(),
--      this.loadVideoViews.perform()
--    ]);
-+    let dataRequests = [
-+      this.loadSeries.perform()
-+    ];
-+
-+    if (this.currentSession.currentUser) {
-+      dataRequests.push(this.loadVideoViews.perform());
-+    }
-+
-+    yield all(dataRequests);
-   }),
+   afterModel(topic) {
+diff --git a/mirage/scenarios/default.js b/mirage/scenarios/default.js
+index 5b839bd..b36a743 100644
+--- a/mirage/scenarios/default.js
++++ b/mirage/scenarios/default.js
+@@ -12,8 +12,8 @@ import userStates from './user-states';
+ // Choose one
+ const state =
+   // 'anonymous'
+-  'unsubscribed'
+-  // 'subscribed'
++  // 'unsubscribed'
++  'subscribed'
+ ;
  
-   loadSeries: task(function*() {
-diff --git a/mirage/config.js b/mirage/config.js
-index 28f5968..ef70f23 100644
---- a/mirage/config.js
-+++ b/mirage/config.js
-@@ -1,4 +1,4 @@
--import { faker } from 'ember-cli-mirage';
-+import { Response, faker } from 'ember-cli-mirage';
- import config from 'ember-map/config/environment';
- import cacheRoutes from './handlers/cache';
- import _ from 'lodash';
-@@ -234,7 +234,15 @@ export default function() {
-   this.get('/receipts/:id')
+ export default function(server) {
+diff --git a/mirage/scenarios/user-states.js b/mirage/scenarios/user-states.js
+index f4c3684..223f591 100644
+--- a/mirage/scenarios/user-states.js
++++ b/mirage/scenarios/user-states.js
+@@ -53,6 +53,17 @@ export default {
+       });
+     }
  
-   this.post('/video-events');
--  this.get('/video-views');
-+  this.get('/video-views', (schema, request) => {
-+    let params = request.queryParams;
-+
-+    if (!params['filter[series_id]'] || !params['filter[user_id]']) {
-+      return new Response(400);
-+    }
-+
-+    return schema.videoViews.all();
-+  });
- 
-   this.post('/linkedin-trials', (schema, request) => {
-     // TODO: I had to do this to get "relationships" to show up on included records – why? Investigate alwaysIncludeLinkageData
-diff --git a/tests/acceptance/video-test.js b/tests/acceptance/video-test.js
-index a51770f..f9a09de 100644
---- a/tests/acceptance/video-test.js
-+++ b/tests/acceptance/video-test.js
-@@ -32,12 +32,12 @@ module('Acceptance | Video', function(hooks) {
-     assert.elementExists(testId('series-card'));
-   });
- 
--  test('I can click on a series from the videos page and see more details', async function(assert) {
--    await visit('/video');
--    await click(testId('series-link'));
--
--    assert.elementExists(testId('video-link'), this.series.clips.length);
--  });
-+  // test('I can click on a series from the videos page and see more details', async function(assert) {
-+  //   await visit('/video');
-+  //   await click(testId('series-link'));
-+  //
-+  //   assert.elementExists(testId('video-link'), this.series.clips.length);
-+  // });
- 
-   test('As an unauthenticed user I should see the series description on a video page', async function(assert) {
-     await visit(`/topics/${this.series.slug}/${this.paidClip.slug}`);
-@@ -149,11 +149,18 @@ module('Acceptance | Video', function(hooks) {
-     assert.dom(`[data-test-id="viewed-video-${this.freeClip.id}"]`).doesNotExist();
-   });
- 
--  // test(`I should not see a played label if I have an unfinished video view`, async function(assert) {
--  // })
-+  test(`I should not see a played label if I have an unfinished video view`, async function(assert) {
-+    let currentUser = loginUser();
-+    this.server.create('video-view', {
-+      user: currentUser,
-+      clip: this.freeClip,
-+      finished: false
++    // Create a video view
++    let mirageSeries = server.schema.series
++      .where({ slug: 'mirage-tips-and-tricks' })
++      .models[0];
++    server.create('video-view', {
++      user,
++      clip: mirageSeries.clips.models[0],
++      finished: true
 +    });
- 
--  // test(`I cannot see other users video views`, async function(assert) {
--  // })
-+    await visit(`/topics/${this.series.slug}/${this.freeClip.slug}`);
 +
-+    assert.dom(`[data-test-id="viewed-video-${this.freeClip.id}"]`).doesNotExist();
-+  });
- 
-   // test(`the video page doesnt break for unauthd users`, async function(assert) {
-   // })
++    // Create some receipts
+     server.create('receipt-email', {
+       team,
+       email: 'accounting@embermap.com'
